@@ -183,19 +183,19 @@ CURRENT_VARIABLES: dict[str, VariableMeta] = {
 
 WEATHER_MODELS: dict[str, str] = {
     "best_match": "Best Match (Auto)",
-    "ecmwf_ifs_9km": "ECMWF IFS 9km",
-    "ecmwf_ifs_025": "ECMWF IFS 0.25°",
-    "ecmwf_aifs_025": "ECMWF AIFS 0.25°",
+    "ecmwf_ifs": "ECMWF IFS HRES 9km",
+    "ecmwf_ifs025": "ECMWF IFS 0.25°",
+    "ecmwf_aifs025": "ECMWF AIFS 0.25° Single",
     "cma_grapes_global": "CMA GRAPES Global",
     "bom_access_global": "BOM ACCESS Global",
     "ncep_gfs_seamless": "NCEP GFS Seamless",
-    "ncep_gfs_011": "NCEP GFS 0.11°",
+    "ncep_gfs025": "NCEP GFS 0.25°",
     "ncep_hrrr_conus": "NCEP HRRR (CONUS)",
     "ncep_nbm_conus": "NCEP NBM (CONUS)",
     "ncep_nam_conus": "NCEP NAM (CONUS)",
-    "ncep_gfs_graphcast": "NCEP GFS GraphCast",
-    "ncep_aigfs_025": "NCEP AI-GFS 0.25°",
-    "ncep_hgefs_025": "NCEP HGEFS 0.25°",
+    "ncep_gfs_graphcast025": "NCEP GFS GraphCast 0.25°",
+    "ncep_aigfs025": "NCEP AIGFS 0.25°",
+    "ncep_hgefs025_ensemble_mean": "NCEP HGEFS 0.25° Ensemble Mean",
     "jma_seamless": "JMA Seamless",
     "jma_msm": "JMA MSM",
     "jma_gsm": "JMA GSM",
@@ -217,7 +217,7 @@ WEATHER_MODELS: dict[str, str] = {
     "meteofrance_arome_france": "Météo-France AROME France",
     "meteofrance_arome_france_hd": "Météo-France AROME France HD",
     "italia_meteo_arpae_icon_2i": "ARPAE ICON-2I (Italy)",
-    "metno_nordic_seamless": "MET Norway Nordic Seamless",
+    "metno_seamless": "MET Norway Nordic Seamless (with ECMWF)",
     "metno_nordic": "MET Norway Nordic",
     "knmi_seamless": "KNMI Seamless",
     "knmi_harmonie_arome_europe": "KNMI HARMONIE-AROME Europe",
@@ -225,11 +225,22 @@ WEATHER_MODELS: dict[str, str] = {
     "dmi_seamless": "DMI Seamless",
     "dmi_harmonie_arome_europe": "DMI HARMONIE-AROME Europe",
     "ukmo_seamless": "UKMO Seamless",
-    "ukmo_global_10km": "UKMO Global 10km",
-    "ukmo_uk_2km": "UKMO UK 2km",
-    "meteoswiss_seamless": "MeteoSwiss Seamless",
+    "ukmo_global_deterministic_10km": "UKMO Global 10km",
+    "ukmo_uk_deterministic_2km": "UKMO UK 2km",
+    "meteoswiss_icon_seamless": "MeteoSwiss Seamless",
     "meteoswiss_icon_ch1": "MeteoSwiss ICON-CH1",
     "meteoswiss_icon_ch2": "MeteoSwiss ICON-CH2",
     "geosphere_seamless": "GeoSphere Austria Seamless",
     "geosphere_arome_austria": "GeoSphere AROME Austria",
 }
+
+
+def model_display_name(model_id: str | None) -> str:
+    """Return the human-friendly display name for a configured weather model id.
+
+    Falls back to the raw id itself for any model not yet in WEATHER_MODELS,
+    so a newly added upstream model never renders as blank.
+    """
+    if not model_id:
+        model_id = "best_match"
+    return WEATHER_MODELS.get(model_id, model_id)

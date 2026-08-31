@@ -10,7 +10,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_MODEL, CONF_NAME, DOMAIN
+from .const import CONF_MODEL, CONF_NAME, DOMAIN, model_display_name
 from .coordinator import OpenMeteoCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -74,14 +74,31 @@ class OpenMeteoWeatherEntity(CoordinatorEntity[OpenMeteoCoordinator], WeatherEnt
         entry: ConfigEntry,
     ) -> None:
         super().__init__(coordinator)
+        self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_weather"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=entry.data.get(CONF_NAME, "Open-Meteo"),
             manufacturer="Open-Meteo",
-            model=entry.options.get(CONF_MODEL, entry.data.get(CONF_MODEL, "best_match")),
+            model=model_display_name(self._model_id),
             configuration_url="https://open-meteo.com/en/docs",
         )
+
+    @property
+    def _model_id(self) -> str:
+        """The weather model id currently configured for this entry."""
+        return self._entry.options.get(CONF_MODEL, self._entry.data.get(CONF_MODEL, "best_match"))
+
+    @property
+    def attribution(self) -> str:
+        return f"Weather data by Open-Meteo · Model: {model_display_name(self._model_id)}"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "weather_model": model_display_name(self._model_id),
+            "weather_model_id": self._model_id,
+        }
 
     @property
     def _weather(self) -> dict[str, Any]:

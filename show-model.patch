@@ -1,0 +1,223 @@
+diff --git a/custom_components/open_meteo_advanced/const.py b/custom_components/open_meteo_advanced/const.py
+index cdb947a..761bc01 100644
+--- a/custom_components/open_meteo_advanced/const.py
++++ b/custom_components/open_meteo_advanced/const.py
+@@ -183,19 +183,19 @@ CURRENT_VARIABLES: dict[str, VariableMeta] = {
+ 
+ WEATHER_MODELS: dict[str, str] = {
+     "best_match": "Best Match (Auto)",
+-    "ecmwf_ifs_9km": "ECMWF IFS 9km",
+-    "ecmwf_ifs_025": "ECMWF IFS 0.25°",
+-    "ecmwf_aifs_025": "ECMWF AIFS 0.25°",
++    "ecmwf_ifs": "ECMWF IFS HRES 9km",
++    "ecmwf_ifs025": "ECMWF IFS 0.25°",
++    "ecmwf_aifs025": "ECMWF AIFS 0.25° Single",
+     "cma_grapes_global": "CMA GRAPES Global",
+     "bom_access_global": "BOM ACCESS Global",
+     "ncep_gfs_seamless": "NCEP GFS Seamless",
+-    "ncep_gfs_011": "NCEP GFS 0.11°",
++    "ncep_gfs025": "NCEP GFS 0.25°",
+     "ncep_hrrr_conus": "NCEP HRRR (CONUS)",
+     "ncep_nbm_conus": "NCEP NBM (CONUS)",
+     "ncep_nam_conus": "NCEP NAM (CONUS)",
+-    "ncep_gfs_graphcast": "NCEP GFS GraphCast",
+-    "ncep_aigfs_025": "NCEP AI-GFS 0.25°",
+-    "ncep_hgefs_025": "NCEP HGEFS 0.25°",
++    "ncep_gfs_graphcast025": "NCEP GFS GraphCast 0.25°",
++    "ncep_aigfs025": "NCEP AIGFS 0.25°",
++    "ncep_hgefs025_ensemble_mean": "NCEP HGEFS 0.25° Ensemble Mean",
+     "jma_seamless": "JMA Seamless",
+     "jma_msm": "JMA MSM",
+     "jma_gsm": "JMA GSM",
+@@ -217,7 +217,7 @@ WEATHER_MODELS: dict[str, str] = {
+     "meteofrance_arome_france": "Météo-France AROME France",
+     "meteofrance_arome_france_hd": "Météo-France AROME France HD",
+     "italia_meteo_arpae_icon_2i": "ARPAE ICON-2I (Italy)",
+-    "metno_nordic_seamless": "MET Norway Nordic Seamless",
++    "metno_seamless": "MET Norway Nordic Seamless (with ECMWF)",
+     "metno_nordic": "MET Norway Nordic",
+     "knmi_seamless": "KNMI Seamless",
+     "knmi_harmonie_arome_europe": "KNMI HARMONIE-AROME Europe",
+@@ -225,11 +225,22 @@ WEATHER_MODELS: dict[str, str] = {
+     "dmi_seamless": "DMI Seamless",
+     "dmi_harmonie_arome_europe": "DMI HARMONIE-AROME Europe",
+     "ukmo_seamless": "UKMO Seamless",
+-    "ukmo_global_10km": "UKMO Global 10km",
+-    "ukmo_uk_2km": "UKMO UK 2km",
+-    "meteoswiss_seamless": "MeteoSwiss Seamless",
++    "ukmo_global_deterministic_10km": "UKMO Global 10km",
++    "ukmo_uk_deterministic_2km": "UKMO UK 2km",
++    "meteoswiss_icon_seamless": "MeteoSwiss Seamless",
+     "meteoswiss_icon_ch1": "MeteoSwiss ICON-CH1",
+     "meteoswiss_icon_ch2": "MeteoSwiss ICON-CH2",
+     "geosphere_seamless": "GeoSphere Austria Seamless",
+     "geosphere_arome_austria": "GeoSphere AROME Austria",
+ }
++
++
++def model_display_name(model_id: str | None) -> str:
++    """Return the human-friendly display name for a configured weather model id.
++
++    Falls back to the raw id itself for any model not yet in WEATHER_MODELS,
++    so a newly added upstream model never renders as blank.
++    """
++    if not model_id:
++        model_id = "best_match"
++    return WEATHER_MODELS.get(model_id, model_id)
+diff --git a/custom_components/open_meteo_advanced/manifest.json b/custom_components/open_meteo_advanced/manifest.json
+index 11edf32..29355e6 100644
+--- a/custom_components/open_meteo_advanced/manifest.json
++++ b/custom_components/open_meteo_advanced/manifest.json
+@@ -1,7 +1,7 @@
+ {
+   "domain": "open_meteo_advanced",
+   "name": "Open-Meteo Advanced",
+-  "version": "1.0.0",
++  "version": "1.1.0",
+   "config_flow": true,
+   "documentation": "https://github.com/stilli00/ha-open-meteo-advanced",
+   "issue_tracker": "https://github.com/stilli00/ha-open-meteo-advanced/issues",
+diff --git a/custom_components/open_meteo_advanced/sensor.py b/custom_components/open_meteo_advanced/sensor.py
+index 96b000c..edda90e 100644
+--- a/custom_components/open_meteo_advanced/sensor.py
++++ b/custom_components/open_meteo_advanced/sensor.py
+@@ -22,11 +22,18 @@ from .const import (
+     DOMAIN,
+     HOURLY_VARIABLES,
+     VariableMeta,
++    model_display_name,
+ )
+ from .coordinator import OpenMeteoCoordinator
+ 
+ _LOGGER = logging.getLogger(__name__)
+ 
++try:
++    from homeassistant.const import EntityCategory
++    _DIAGNOSTIC = EntityCategory.DIAGNOSTIC
++except (ImportError, AttributeError):
++    _DIAGNOSTIC = None
++
+ # Device classes that require a matching unit; fall back to None if unsupported by the HA version
+ _SAFE_DEVICE_CLASSES = {
+     "temperature", "humidity", "atmospheric_pressure", "precipitation",
+@@ -48,7 +55,7 @@ async def async_setup_entry(
+     coordinator: OpenMeteoCoordinator = hass.data[DOMAIN][entry.entry_id]
+     opts: dict[str, Any] = {**entry.data, **entry.options}
+ 
+-    entities: list[OpenMeteoSensor] = []
++    entities: list[Any] = [OpenMeteoModelSensor(coordinator, entry)]
+ 
+     for var in opts.get(CONF_CURRENT_VARS, []):
+         if meta := CURRENT_VARIABLES.get(var):
+@@ -98,11 +105,12 @@ class OpenMeteoSensor(CoordinatorEntity[OpenMeteoCoordinator], SensorEntity):
+         if meta.device_class == "timestamp":
+             self._attr_state_class = None
+ 
++        model_id = entry.options.get(CONF_MODEL, entry.data.get(CONF_MODEL, "best_match"))
+         self._attr_device_info = DeviceInfo(
+             identifiers={(DOMAIN, entry.entry_id)},
+             name=location_name,
+             manufacturer="Open-Meteo",
+-            model=entry.options.get(CONF_MODEL, entry.data.get(CONF_MODEL, "best_match")),
++            model=model_display_name(model_id),
+             configuration_url="https://open-meteo.com/en/docs",
+         )
+ 
+@@ -120,3 +128,50 @@ class OpenMeteoSensor(CoordinatorEntity[OpenMeteoCoordinator], SensorEntity):
+         if forecast:
+             return {"forecast": forecast}
+         return {}
++
++
++class OpenMeteoModelSensor(CoordinatorEntity[OpenMeteoCoordinator], SensorEntity):
++    """Diagnostic sensor showing which forecast model is configured for this location.
++
++    Always created, independent of variable selection, so it's visible even if
++    the weather entity is disabled and no per-variable sensors are selected.
++    """
++
++    _attr_has_entity_name = True
++    _attr_name = "Weather Model"
++    _attr_icon = "mdi:weather-partly-cloudy"
++    _attr_entity_category = _DIAGNOSTIC
++
++    def __init__(self, coordinator: OpenMeteoCoordinator, entry: ConfigEntry) -> None:
++        super().__init__(coordinator)
++        self._entry = entry
++        location_name = entry.data.get(CONF_NAME, "Open-Meteo")
++
++        self._attr_unique_id = f"{entry.entry_id}_weather_model"
++        self._attr_device_info = DeviceInfo(
++            identifiers={(DOMAIN, entry.entry_id)},
++            name=location_name,
++            manufacturer="Open-Meteo",
++            model=model_display_name(self._model_id),
++            configuration_url="https://open-meteo.com/en/docs",
++        )
++
++    @property
++    def _model_id(self) -> str:
++        opts: dict[str, Any] = {**self._entry.data, **self._entry.options}
++        return opts.get(CONF_MODEL, "best_match")
++
++    @property
++    def native_value(self) -> str:
++        return model_display_name(self._model_id)
++
++    @property
++    def extra_state_attributes(self) -> dict[str, Any]:
++        attrs: dict[str, Any] = {"model_id": self._model_id}
++        if self._model_id == "best_match":
++            attrs["note"] = (
++                "Best Match lets Open-Meteo auto-select a model per location; "
++                "the API response does not report which underlying model was "
++                "actually used for a given point in time."
++            )
++        return attrs
+diff --git a/custom_components/open_meteo_advanced/weather.py b/custom_components/open_meteo_advanced/weather.py
+index e4974ce..9ac6e0f 100644
+--- a/custom_components/open_meteo_advanced/weather.py
++++ b/custom_components/open_meteo_advanced/weather.py
+@@ -10,7 +10,7 @@ from homeassistant.helpers.entity import DeviceInfo
+ from homeassistant.helpers.entity_platform import AddEntitiesCallback
+ from homeassistant.helpers.update_coordinator import CoordinatorEntity
+ 
+-from .const import CONF_MODEL, CONF_NAME, DOMAIN
++from .const import CONF_MODEL, CONF_NAME, DOMAIN, model_display_name
+ from .coordinator import OpenMeteoCoordinator
+ 
+ _LOGGER = logging.getLogger(__name__)
+@@ -74,15 +74,32 @@ class OpenMeteoWeatherEntity(CoordinatorEntity[OpenMeteoCoordinator], WeatherEnt
+         entry: ConfigEntry,
+     ) -> None:
+         super().__init__(coordinator)
++        self._entry = entry
+         self._attr_unique_id = f"{entry.entry_id}_weather"
+         self._attr_device_info = DeviceInfo(
+             identifiers={(DOMAIN, entry.entry_id)},
+             name=entry.data.get(CONF_NAME, "Open-Meteo"),
+             manufacturer="Open-Meteo",
+-            model=entry.options.get(CONF_MODEL, entry.data.get(CONF_MODEL, "best_match")),
++            model=model_display_name(self._model_id),
+             configuration_url="https://open-meteo.com/en/docs",
+         )
+ 
++    @property
++    def _model_id(self) -> str:
++        """The weather model id currently configured for this entry."""
++        return self._entry.options.get(CONF_MODEL, self._entry.data.get(CONF_MODEL, "best_match"))
++
++    @property
++    def attribution(self) -> str:
++        return f"Weather data by Open-Meteo · Model: {model_display_name(self._model_id)}"
++
++    @property
++    def extra_state_attributes(self) -> dict[str, Any]:
++        return {
++            "weather_model": model_display_name(self._model_id),
++            "weather_model_id": self._model_id,
++        }
++
+     @property
+     def _weather(self) -> dict[str, Any]:
+         if self.coordinator.data:

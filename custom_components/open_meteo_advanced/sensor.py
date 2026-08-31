@@ -22,10 +22,17 @@ from .const import (
     DOMAIN,
     HOURLY_VARIABLES,
     VariableMeta,
+    model_display_name,
 )
 from .coordinator import OpenMeteoCoordinator
 
 _LOGGER = logging.getLogger(__name__)
+
+try:
+    from homeassistant.const import EntityCategory
+    _DIAGNOSTIC = EntityCategory.DIAGNOSTIC
+except (ImportError, AttributeError):
+    _DIAGNOSTIC = None
 
 # Device classes that require a matching unit; fall back to None if unsupported by the HA version
 _SAFE_DEVICE_CLASSES = {
@@ -48,7 +55,7 @@ async def async_setup_entry(
     coordinator: OpenMeteoCoordinator = hass.data[DOMAIN][entry.entry_id]
     opts: dict[str, Any] = {**entry.data, **entry.options}
 
-    entities: list[OpenMeteoSensor] = []
+    entities: list[Any] = [OpenMeteoModelSensor(coordinator, entry)]
 
     for var in opts.get(CONF_CURRENT_VARS, []):
         if meta := CURRENT_VARIABLES.get(var):
@@ -98,11 +105,12 @@ class OpenMeteoSensor(CoordinatorEntity[OpenMeteoCoordinator], SensorEntity):
         if meta.device_class == "timestamp":
             self._attr_state_class = None
 
+        model_id = entry.options.get(CONF_MODEL, entry.data.get(CONF_MODEL, "best_match"))
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=location_name,
             manufacturer="Open-Meteo",
-            model=entry.options.get(CONF_MODEL, entry.data.get(CONF_MODEL, "best_match")),
+            model=model_display_name(model_id),
             configuration_url="https://open-meteo.com/en/docs",
         )
 
@@ -120,3 +128,50 @@ class OpenMeteoSensor(CoordinatorEntity[OpenMeteoCoordinator], SensorEntity):
         if forecast:
             return {"forecast": forecast}
         return {}
+
+
+class OpenMeteoModelSensor(CoordinatorEntity[OpenMeteoCoordinator], SensorEntity):
+    """Diagnostic sensor showing which forecast model is configured for this location.
+
+    Always created, independent of variable selection, so it's visible even if
+    the weather entity is disabled and no per-variable sensors are selected.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Weather Model"
+    _attr_icon = "mdi:weather-partly-cloudy"
+    _attr_entity_category = _DIAGNOSTIC
+
+    def __init__(self, coordinator: OpenMeteoCoordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator)
+        self._entry = entry
+        location_name = entry.data.get(CONF_NAME, "Open-Meteo")
+
+        self._attr_unique_id = f"{entry.entry_id}_weather_model"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)},
+            name=location_name,
+            manufacturer="Open-Meteo",
+            model=model_display_name(self._model_id),
+            configuration_url="https://open-meteo.com/en/docs",
+        )
+
+    @property
+    def _model_id(self) -> str:
+        opts: dict[str, Any] = {**self._entry.data, **self._entry.options}
+        return opts.get(CONF_MODEL, "best_match")
+
+    @property
+    def native_value(self) -> str:
+        return model_display_name(self._model_id)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        attrs: dict[str, Any] = {"model_id": self._model_id}
+        if self._model_id == "best_match":
+            attrs["note"] = (
+                "Best Match lets Open-Meteo auto-select a model per location; "
+                "the API response does not report which underlying model was "
+                "actually used for a given point in time."
+            )
+        return attrs
