@@ -1,5 +1,5 @@
 diff --git a/custom_components/open_meteo_advanced/const.py b/custom_components/open_meteo_advanced/const.py
-index cdb947a..761bc01 100644
+index cdb947a..d6a4e0a 100644
 --- a/custom_components/open_meteo_advanced/const.py
 +++ b/custom_components/open_meteo_advanced/const.py
 @@ -183,19 +183,19 @@ CURRENT_VARIABLES: dict[str, VariableMeta] = {
@@ -11,12 +11,12 @@ index cdb947a..761bc01 100644
 -    "ecmwf_aifs_025": "ECMWF AIFS 0.25°",
 +    "ecmwf_ifs": "ECMWF IFS HRES 9km",
 +    "ecmwf_ifs025": "ECMWF IFS 0.25°",
-+    "ecmwf_aifs025": "ECMWF AIFS 0.25° Single",
++    "ecmwf_aifs025_single": "ECMWF AIFS 0.25° Single",
      "cma_grapes_global": "CMA GRAPES Global",
      "bom_access_global": "BOM ACCESS Global",
      "ncep_gfs_seamless": "NCEP GFS Seamless",
 -    "ncep_gfs_011": "NCEP GFS 0.11°",
-+    "ncep_gfs025": "NCEP GFS 0.25°",
++    "ncep_gfs_global": "NCEP GFS Global 0.11°/0.25°",
      "ncep_hrrr_conus": "NCEP HRRR (CONUS)",
      "ncep_nbm_conus": "NCEP NBM (CONUS)",
      "ncep_nam_conus": "NCEP NAM (CONUS)",
@@ -29,7 +29,23 @@ index cdb947a..761bc01 100644
      "jma_seamless": "JMA Seamless",
      "jma_msm": "JMA MSM",
      "jma_gsm": "JMA GSM",
-@@ -217,7 +217,7 @@ WEATHER_MODELS: dict[str, str] = {
+@@ -206,18 +206,18 @@ WEATHER_MODELS: dict[str, str] = {
+     "dwd_icon_global": "DWD ICON Global",
+     "dwd_icon_eu": "DWD ICON-EU",
+     "dwd_icon_d2": "DWD ICON-D2",
+-    "gem_seamless": "GEM Seamless",
+-    "gem_global": "GEM Global",
+-    "gem_regional": "GEM Regional",
+-    "gem_hrdps_continental": "GEM HRDPS Continental",
+-    "gem_hrdps_west": "GEM HRDPS West",
++    "cmc_gem_seamless": "GEM Seamless",
++    "cmc_gem_gdps": "GEM Global",
++    "cmc_gem_rdps": "GEM Regional",
++    "cmc_gem_hrdps": "GEM HRDPS Continental",
++    "cmc_gem_hrdps_west": "GEM HRDPS West",
+     "meteofrance_seamless": "Météo-France Seamless",
+     "meteofrance_arpege_world": "Météo-France ARPEGE World",
+     "meteofrance_arpege_europe": "Météo-France ARPEGE Europe",
      "meteofrance_arome_france": "Météo-France AROME France",
      "meteofrance_arome_france_hd": "Météo-France AROME France HD",
      "italia_meteo_arpae_icon_2i": "ARPAE ICON-2I (Italy)",
