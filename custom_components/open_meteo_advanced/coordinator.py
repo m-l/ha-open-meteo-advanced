@@ -23,6 +23,7 @@ from .const import (
     CONF_MODEL,
     CONF_PAST_DAYS,
     CONF_WEATHER_ENTITY,
+    DEFAULT_FORECAST_DAYS,
     DOMAIN,
     WEATHER_CURRENT_VARS,
     WEATHER_DAILY_VARS,
@@ -31,9 +32,6 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
-
-MAX_HOURLY_FORECAST = 48
-MAX_DAILY_FORECAST = 14
 
 
 class OpenMeteoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -75,7 +73,7 @@ class OpenMeteoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "longitude": opts[CONF_LONGITUDE],
             "timezone": "auto",
             "wind_speed_unit": "kmh",
-            "forecast_days": opts.get(CONF_FORECAST_DAYS, 7),
+            "forecast_days": opts.get(CONF_FORECAST_DAYS, DEFAULT_FORECAST_DAYS),
             "past_days": opts.get(CONF_PAST_DAYS, 0),
         }
 
@@ -103,10 +101,10 @@ class OpenMeteoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except aiohttp.ClientError as err:
             raise UpdateFailed(f"Connection error: {err}") from err
 
-        result = self._parse_sensors(raw, user_hourly, user_daily, user_current)
+        result = self._parse_sensors(raw, opts, user_hourly, user_daily, user_current)
 
         if weather_entity:
-            result["_weather"] = self._parse_weather(raw)
+            result["_weather"] = self._parse_weather(raw, opts)
 
         return result
 
@@ -117,12 +115,21 @@ class OpenMeteoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _parse_sensors(
         self,
         raw: dict[str, Any],
+        opts: dict[str, Any],
         hourly_vars: list[str],
         daily_vars: list[str],
         current_vars: list[str],
     ) -> dict[str, Any]:
         result: dict[str, Any] = {}
         now = datetime.now()
+        forecast_days = int(opts.get(CONF_FORECAST_DAYS, DEFAULT_FORECAST_DAYS))
+        # Hourly forecast length follows the configured forecast_days, same as
+        # what Open-Meteo actually returns - previously hardcoded to 48h (2 days),
+        # which silently truncated hourly-only consumers (e.g. cards that build
+        # a multi-day view purely from the hourly forecast) regardless of this
+        # entry's actual Forecast days setting.
+        max_hourly = forecast_days * 24
+        max_daily = forecast_days
 
         if current_vars and "current" in raw:
             current = raw["current"]
@@ -144,7 +151,7 @@ class OpenMeteoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 values: list = hourly.get(var, [])
                 result[f"hourly_{var}"] = values[idx] if idx is not None and idx < len(values) else None
                 if idx is not None:
-                    end = min(idx + MAX_HOURLY_FORECAST, len(times))
+                    end = min(idx + max_hourly, len(times))
                     result[f"hourly_{var}_forecast"] = [
                         {"time": times[i], "value": values[i] if i < len(values) else None}
                         for i in range(idx, end)
@@ -163,7 +170,7 @@ class OpenMeteoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 values = daily.get(var, [])
                 result[f"daily_{var}"] = values[idx] if idx is not None and idx < len(values) else None
                 if idx is not None:
-                    end = min(idx + MAX_DAILY_FORECAST, len(times))
+                    end = min(idx + max_daily, len(times))
                     result[f"daily_{var}_forecast"] = [
                         {"time": times[i], "value": values[i] if i < len(values) else None}
                         for i in range(idx, end)
@@ -175,8 +182,11 @@ class OpenMeteoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     # Weather entity data parsing
     # ------------------------------------------------------------------
 
-    def _parse_weather(self, raw: dict[str, Any]) -> dict[str, Any]:
+    def _parse_weather(self, raw: dict[str, Any], opts: dict[str, Any]) -> dict[str, Any]:
         now = datetime.now()
+        forecast_days = int(opts.get(CONF_FORECAST_DAYS, DEFAULT_FORECAST_DAYS))
+        max_hourly = forecast_days * 24
+        max_daily = forecast_days
         current_raw = raw.get("current", {})
 
         weather: dict[str, Any] = {
@@ -203,7 +213,7 @@ class OpenMeteoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if h_times:
             current_hour = now.strftime("%Y-%m-%dT%H:00")
             start = next((i for i, t in enumerate(h_times) if t >= current_hour), 0)
-            end = min(start + MAX_HOURLY_FORECAST, len(h_times))
+            end = min(start + max_hourly, len(h_times))
 
             h_temp = hourly_raw.get("temperature_2m", [])
             h_code = hourly_raw.get("weather_code", [])
@@ -237,7 +247,7 @@ class OpenMeteoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if d_times:
             today = now.strftime("%Y-%m-%d")
             start = next((i for i, t in enumerate(d_times) if t >= today), 0)
-            end = min(start + MAX_DAILY_FORECAST, len(d_times))
+            end = min(start + max_daily, len(d_times))
 
             d_max = daily_raw.get("temperature_2m_max", [])
             d_min = daily_raw.get("temperature_2m_min", [])
