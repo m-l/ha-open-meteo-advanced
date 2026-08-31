@@ -39,9 +39,20 @@ A custom integration for [Home Assistant](https://www.home-assistant.io/) that e
 3. Restart Home Assistant.
 4. Go to **Settings → Devices & Services → + Add Integration** and search for **Open-Meteo Advanced**.
 
-### HACS (coming soon)
+### HACS
 
-Support for installation via [HACS](https://hacs.xyz/) is planned.
+This repository is not yet in the default HACS store, but you can add it as a **custom repository**:
+
+1. In Home Assistant, go to **HACS → Integrations**.
+2. Click the **⋮** menu (top right) → **Custom repositories**.
+3. Add `https://github.com/m-l/ha-open-meteo-advanced` with category **Integration**.
+4. Find **Open-Meteo Advanced** in HACS and click **Download**.
+5. Restart Home Assistant.
+6. Go to **Settings → Devices & Services → + Add Integration** and search for **Open-Meteo Advanced**.
+
+Or use this button (after adding the custom repository above):
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=m-l&repository=ha-open-meteo-advanced&category=integration)
 
 ---
 

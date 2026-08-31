@@ -3,9 +3,10 @@
   "name": "Open-Meteo Advanced",
   "version": "1.0.0",
   "config_flow": true,
-  "documentation": "https://open-meteo.com/en/docs",
+  "documentation": "https://github.com/stilli00/ha-open-meteo-advanced",
+  "issue_tracker": "https://github.com/stilli00/ha-open-meteo-advanced/issues",
   "requirements": [],
   "dependencies": [],
-  "codeowners": [],
+  "codeowners": ["@stilli00", "@m-l"],
   "iot_class": "cloud_polling"
 }
