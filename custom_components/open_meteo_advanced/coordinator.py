@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import aiohttp
@@ -23,8 +23,11 @@ from .const import (
     CONF_MODEL,
     CONF_PAST_DAYS,
     CONF_WEATHER_ENTITY,
+    CURRENT_VARIABLES,
+    DAILY_VARIABLES,
     DEFAULT_FORECAST_DAYS,
     DOMAIN,
+    HOURLY_VARIABLES,
     WEATHER_CURRENT_VARS,
     WEATHER_DAILY_VARS,
     WEATHER_HOURLY_VARS,
@@ -32,6 +35,26 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _parse_timestamp_value(value: Any, utc_offset_seconds: int) -> datetime | None:
+    """Convert an Open-Meteo timestamp string into a tz-aware datetime.
+
+    Open-Meteo returns fields like sunrise/sunset as naive local-time ISO
+    strings (e.g. "2026-09-07T19:09") when timezone=auto is used. HA's
+    SensorEntity requires an actual timezone-aware datetime object for
+    device_class="timestamp" - passing the raw string crashes entity setup
+    with "'str' object has no attribute 'tzinfo'".
+    """
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        dt = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone(timedelta(seconds=utc_offset_seconds)))
+    return dt
 
 
 class OpenMeteoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -130,11 +153,16 @@ class OpenMeteoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # entry's actual Forecast days setting.
         max_hourly = forecast_days * 24
         max_daily = forecast_days
+        utc_offset = raw.get("utc_offset_seconds", 0)
 
         if current_vars and "current" in raw:
             current = raw["current"]
             for var in current_vars:
-                result[f"current_{var}"] = current.get(var)
+                value = current.get(var)
+                meta = CURRENT_VARIABLES.get(var)
+                if meta and meta.device_class == "timestamp":
+                    value = _parse_timestamp_value(value, utc_offset)
+                result[f"current_{var}"] = value
 
         if hourly_vars and "hourly" in raw:
             hourly = raw["hourly"]
@@ -149,13 +177,22 @@ class OpenMeteoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             for var in hourly_vars:
                 values: list = hourly.get(var, [])
-                result[f"hourly_{var}"] = values[idx] if idx is not None and idx < len(values) else None
+                meta = HOURLY_VARIABLES.get(var)
+                is_timestamp = bool(meta and meta.device_class == "timestamp")
+
+                raw_value = values[idx] if idx is not None and idx < len(values) else None
+                result[f"hourly_{var}"] = (
+                    _parse_timestamp_value(raw_value, utc_offset) if is_timestamp else raw_value
+                )
                 if idx is not None:
                     end = min(idx + max_hourly, len(times))
-                    result[f"hourly_{var}_forecast"] = [
-                        {"time": times[i], "value": values[i] if i < len(values) else None}
-                        for i in range(idx, end)
-                    ]
+                    forecast_entries = []
+                    for i in range(idx, end):
+                        v = values[i] if i < len(values) else None
+                        if is_timestamp:
+                            v = _parse_timestamp_value(v, utc_offset)
+                        forecast_entries.append({"time": times[i], "value": v})
+                    result[f"hourly_{var}_forecast"] = forecast_entries
 
         if daily_vars and "daily" in raw:
             daily = raw["daily"]
@@ -168,13 +205,22 @@ class OpenMeteoCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             for var in daily_vars:
                 values = daily.get(var, [])
-                result[f"daily_{var}"] = values[idx] if idx is not None and idx < len(values) else None
+                meta = DAILY_VARIABLES.get(var)
+                is_timestamp = bool(meta and meta.device_class == "timestamp")
+
+                raw_value = values[idx] if idx is not None and idx < len(values) else None
+                result[f"daily_{var}"] = (
+                    _parse_timestamp_value(raw_value, utc_offset) if is_timestamp else raw_value
+                )
                 if idx is not None:
                     end = min(idx + max_daily, len(times))
-                    result[f"daily_{var}_forecast"] = [
-                        {"time": times[i], "value": values[i] if i < len(values) else None}
-                        for i in range(idx, end)
-                    ]
+                    forecast_entries = []
+                    for i in range(idx, end):
+                        v = values[i] if i < len(values) else None
+                        if is_timestamp:
+                            v = _parse_timestamp_value(v, utc_offset)
+                        forecast_entries.append({"time": times[i], "value": v})
+                    result[f"daily_{var}_forecast"] = forecast_entries
 
         return result
 
